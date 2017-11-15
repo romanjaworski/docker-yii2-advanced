@@ -1,0 +1,103 @@
+version: "3"
+
+services:
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    ports:
+      - "80:80"
+    networks:
+      yii_network:
+        ipv4_address: 10.5.0.2
+    links:
+      - fpm
+    volumes:
+      - ./src:/var/www/html
+    restart: always
+  fpm:
+    build:
+      context: .
+      dockerfile: php/Dockerfile
+      args:
+       git_api_token: "${GITHUB_API_TOKEN}"
+    links:
+      - mariadb
+    volumes:
+      - ./src:/var/www/html
+    environment:
+      XDEBUG_CONFIG: remote_host=192.168.99.1
+      PHP_IDE_CONFIG: serverName=IDE
+    ports:
+      - "9001:9001"
+    networks:
+      yii_network:
+        ipv4_address: 10.5.0.3
+    restart: always
+  mariadb:
+    image: mariadb:latest
+    ports:
+      - "3306:3306"
+    networks:
+      yii_network:
+        ipv4_address: 10.5.0.4
+#    volumes:
+#      - ./data/mariadb/:/var/lib/mysql
+#     - ./data/mariadb/plugins/:/usr/lib/mysql/plugin
+    command:
+      - --character-set-server=utf8
+      - --collation-server=utf8_unicode_ci
+      - --skip-character-set-client-handshake
+    environment:
+      - MYSQL_ALLOW_EMPTY_PASSWORD=yes
+      - MYSQL_DATABASE=yii2advanced
+      - MYSQL_USER=yiiuser
+      - MYSQL_PASSWORD=yiipassword#
+    restart: always
+  codecept:
+    build:
+      context: .
+      dockerfile: codeception/Dockerfile
+    depends_on:
+      - chrome
+      - firefox
+    volumes:
+      - ./src:/project
+    networks:
+      yii_network:
+        ipv4_address: 10.5.0.5
+    extra_hosts:
+      - "frontend.dev:10.5.0.2"
+      - "backend.dev:10.5.0.2"
+  chrome:
+    image: 'selenium/standalone-chrome-debug:2.53.1'
+    ports:
+      - '5900'
+      # workaround for Docker for Mac, see https://github.com/SeleniumHQ/docker-selenium/issues/227#issuecomment-224865735
+      # dns: 8.8.4.4
+    environment:
+      - no_proxy=localhost
+    extra_hosts:
+      - "frontend.dev:10.5.0.2"
+    networks:
+      yii_network:
+        ipv4_address: 10.5.0.6
+  firefox:
+    image: 'selenium/standalone-firefox-debug:2.53.1'
+    ports:
+      - '5900'
+      # workaround for Docker for Mac, see https://github.com/SeleniumHQ/docker-selenium/issues/227#issuecomment-224865735
+      # dns: 8.8.4.4
+    environment:
+      - no_proxy=localhost
+    extra_hosts:
+      - "frontend.dev:10.5.0.2"
+    networks:
+      yii_network:
+        ipv4_address: 10.5.0.7
+networks:
+  yii_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.5.0.0/16
